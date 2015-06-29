@@ -1,0 +1,75 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+ 
+  "Description" : "Simple PoC template to launch and bootstrap an instance, take an AMI and destroy the CFN stack afterwards, using a Lambda custom resource.",
+ 
+  "Parameters": {
+    "InstanceType" : {
+      "Description" : "EC2 instance type",
+      "Type" : "String",
+      "Default" : "t2.micro",
+      "AllowedValues" : [ "t2.micro", "t2.small", "t2.medium", "m3.medium" ],
+      "ConstraintDescription" : "Must be a valid EC2 instance type."
+    },
+    "BaseAMI": {
+      "Description" : "Name of base AMI Image to use",
+      "Type" : "String"
+    },
+    "NewAMIName" : {
+      "Description" : "Name of new AMI Image to be created",
+      "Type" : "String",
+      "Default" : "CustomAMI"
+    },
+    "s3Bucket" : {
+      "Description" : "Name of S3 bucket the Lambda function is hosted in",
+      "Type" : "String"
+    },
+    "LambdaFunctionPackage" : {
+      "Description" : "Name of Lambda custom resource function zip file",
+      "Type" : "String",
+      "Default" : "amicreator.zip"
+    },
+    "LambdaExecutionRole" : {
+      "Description" : "ARN of Lambda execution role.",
+      "Type" : "String"
+    }
+  },
+  "Resources" : {
+    "EC2Instance": {  
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType"  : { "Ref" : "InstanceType" },
+        "ImageId": { "Ref" : "BaseAMI" },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join" : [ "", [
+             ] ]
+          }
+        }
+      }
+    },
+     "AMIBuilder": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": "index.handler",
+        "Role": { "Ref" : "LambdaExecutionRole" },
+        "Code": {
+          "S3Bucket": { "Ref" : "s3Bucket" },
+          "S3Key": { "Ref" : "LambdaFunctionPackage" }
+        },
+        "Runtime": "nodejs",
+        "Timeout": "25"
+      }
+    },
+    "AMICustomResource": {
+      "Type": "Custom::AMICustomResource",
+      "DependsOn": "AMIBuilder",
+      "Properties": {
+        "ServiceToken": { "Fn::GetAtt": [ "AMIBuilder", "Arn" ] },
+        "Region": { "Ref": "AWS::Region" },
+        "InstanceId" : {"Ref" : "EC2Instance"},
+        "AMIName" : {"Ref" : "NewAMIName"}
+      }
+    }
+  }
+}
